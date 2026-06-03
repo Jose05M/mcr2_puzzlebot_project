@@ -1,0 +1,56 @@
+#Detector de linea
+line_follower:
+  ros__parameters:
+
+    debug_view: false
+    crop_percent: 0.25
+
+#Controlador
+line_follower_controller:
+  ros__parameters:
+
+    # SPEEDS
+    linear_speed: 0.15
+    curve_speed: 0.07
+    # CURVE DETECTION
+    curve_threshold: 50.0
+
+    # CONTROLLER
+    kp_straight: 0.0015
+    kp_curve: 0.0040
+    kd: 0.0030
+
+    # LIMITS
+    max_angular_vel: 1.5
+    # FILTER
+    alpha: 0.5
+
+#Semaforo
+traffic_light_detector:
+  ros__parameters:
+
+    kernel_size:       6
+    min_blob_area:     2000
+    min_circularity:   0.95
+    debug_image:       false
+
+#Señales
+traffic_sign_detector:
+  ros__parameters:
+
+    model_path: "/home/ed/Downloads/yolo_train/best_1.pt"
+
+    # DETECTION FILTERS
+    min_area: 30000
+    max_area: 80000
+
+    debug_view: true
+
+#Compresor
+image_compressor:
+  ros__parameters:
+
+    width: 416
+    height: 416
+    jpeg_quality: 40
+    grayscale: true
