@@ -24,9 +24,7 @@ from std_msgs.msg import String
 import cv2
 import math
 
-# ---------------------------------------------------------------------------
 # HSV colour ranges
-# ---------------------------------------------------------------------------
 RED_LOWER_1  = np.array([  0, 120,  80], dtype=np.uint8)
 RED_UPPER_1  = np.array([ 10, 255, 255], dtype=np.uint8)
 RED_LOWER_2  = np.array([165, 120,  80], dtype=np.uint8)
@@ -38,9 +36,7 @@ YELLOW_UPPER = np.array([ 18, 255, 255], dtype=np.uint8)
 GREEN_LOWER  = np.array([ 40, 100,  80], dtype=np.uint8)
 GREEN_UPPER  = np.array([ 90, 255, 255], dtype=np.uint8)
 
-# ---------------------------------------------------------------------------
 # Defaults
-# ---------------------------------------------------------------------------
 KERNEL_SIZE_DEFAULT   = 6
 MIN_BLOB_AREA_DEFAULT = 2000
 MIN_CIRCULARITY       = 0.95
@@ -56,10 +52,14 @@ class TrafficLightDetector(Node):
         self.declare_parameter('kernel_size',     KERNEL_SIZE_DEFAULT)
         self.declare_parameter('min_blob_area',   MIN_BLOB_AREA_DEFAULT)
         self.declare_parameter('min_circularity', MIN_CIRCULARITY)
+        self.declare_parameter('camera_topic',    '/video_source/raw')
+        self.declare_parameter('state_topic',     '/traffic_light/state')
         self.declare_parameter('debug_image',     True)
 
         self.min_area  = self.get_parameter('min_blob_area').value
         self.min_circ  = self.get_parameter('min_circularity').value
+        cam_topic      = self.get_parameter('camera_topic').value
+        state_topic    = self.get_parameter('state_topic').value
         self.debug_img = self.get_parameter('debug_image').value
 
         # State machine
@@ -67,8 +67,9 @@ class TrafficLightDetector(Node):
         self.current_state = 'UNKNOWN'
 
         # ROS I/O
-        self.pub_state = self.create_publisher(String, '/traffic_light/state', 10)
-        self.sub_cam   = self.create_subscription(Image, '/video_source/raw', self._image_callback, 10)
+        self.pub_state = self.create_publisher(String, state_topic, 10)
+        self.sub_cam   = self.create_subscription(
+            Image, cam_topic, self._image_callback, 10)
 
         # SimpleBlobDetector — segunda pasada de confirmación
         params = cv2.SimpleBlobDetector_Params()
@@ -90,9 +91,10 @@ class TrafficLightDetector(Node):
         params.maxInertiaRatio     = 1.0
         self.blob_detector = cv2.SimpleBlobDetector_create(params)
 
-        self.get_logger().info('TrafficLightDetector listo — escuchando en /video_source/raw')
+        self.get_logger().info(
+            f'TrafficLightDetector listo — escuchando en {cam_topic}')
 
-    # Paso 3-4: máscaras de color
+    # máscaras de color
     def _build_masks(self, hsv):
         mask_r1 = cv2.inRange(hsv, RED_LOWER_1,  RED_UPPER_1)
         mask_r2 = cv2.inRange(hsv, RED_LOWER_2,  RED_UPPER_2)
@@ -102,7 +104,7 @@ class TrafficLightDetector(Node):
         mask_r  = cv2.bitwise_or(mask_r1, mask_r2)
         return mask_r, mask_y, mask_g
 
-    # Paso 5-6: candidate mask + morfología
+    # candidate mask + morfología
     def _build_candidate(self, hsv):
         # bitwise_and entre brillo y saturación — candidate mask
         bright    = cv2.inRange(hsv[:, :, 2],  80, 255)
@@ -113,6 +115,7 @@ class TrafficLightDetector(Node):
         candidate = cv2.morphologyEx(candidate, cv2.MORPH_OPEN,  kernel)
         candidate = cv2.morphologyEx(candidate, cv2.MORPH_CLOSE, kernel)
         return candidate
+
 
     def _best_blob_contours(self, candidate, mask_r, mask_y, mask_g):
         contours, _ = cv2.findContours(
@@ -185,9 +188,7 @@ class TrafficLightDetector(Node):
 
         return best_color, best_cnt
 
-    # -----------------------------------------------------------------------
     # Paso 9: confirmación con SimpleBlobDetector (fallback)
-    # -----------------------------------------------------------------------
     def _confirm_with_blob_detector(self, mask_r, mask_y, mask_g):
         best_color = None
         best_size  = 0.0
@@ -202,9 +203,7 @@ class TrafficLightDetector(Node):
 
         return best_color
 
-    # -----------------------------------------------------------------------
     # State machine
-    # -----------------------------------------------------------------------
     def _update_state(self, best_color: str) -> str:
         if best_color == 'GREEN':
             self.red_lock = False
@@ -224,7 +223,8 @@ class TrafficLightDetector(Node):
 
     # ROS callback
     def _image_callback(self, msg: Image):
-        frame = np.frombuffer(msg.data, dtype=np.uint8).reshape((msg.height, msg.width, 3))
+        frame = np.frombuffer(msg.data, dtype=np.uint8).reshape(
+            (msg.height, msg.width, 3))
 
         w_t       = msg.width // 2
         roi_frame = frame[:, :w_t, :]
@@ -241,7 +241,7 @@ class TrafficLightDetector(Node):
         # candidate mask + morfología
         candidate = self._build_candidate(hsv)
 
-        # Pasos 7-8: contornos + dominancia
+        # contornos + dominancia
         best_color, best_cnt = self._best_blob_contours(
             candidate, mask_r, mask_y, mask_g)
 
@@ -283,13 +283,15 @@ class TrafficLightDetector(Node):
             blob_colour = colour_map.get(best_color, (160, 160, 160))
             cv2.circle(out, (cx, cy), r,  blob_colour, 2)
             cv2.circle(out, (cx, cy), 3,  blob_colour, -1)
-            cv2.putText(out, best_color, (cx - 30, cy - r - 8),cv2.FONT_HERSHEY_SIMPLEX, 0.55,blob_colour, 2, cv2.LINE_AA)
+            cv2.putText(out, best_color, (cx - 30, cy - r - 8),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.55,
+                        blob_colour, 2, cv2.LINE_AA)
 
         banner = f'State: {state}{"  [LOCKED]" if self.red_lock else ""}'
         cv2.rectangle(out, (0, 0), (frame.shape[1], 36), (30, 30, 30), -1)
-        cv2.putText(out, banner, (8, 24),cv2.FONT_HERSHEY_SIMPLEX, 0.65, cv_colour, 2, cv2.LINE_AA)
+        cv2.putText(out, banner, (8, 24),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.65, cv_colour, 2, cv2.LINE_AA)
         return out
-
 
 def main(args=None):
     rclpy.init(args=args)
@@ -301,6 +303,7 @@ def main(args=None):
     finally:
         node.destroy_node()
         rclpy.shutdown()
+
 
 if __name__ == '__main__':
     main()

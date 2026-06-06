@@ -19,8 +19,32 @@ def generate_launch_description():
 
     config_file = LaunchConfiguration('config')
 
+    detector_semaforo = Node(
+        package='mcr2_puzzlebot',
+        executable='traffic_light_detector',
+        name='traffic_light_detector',
+        parameters=[config_file],
+        output='screen',
+        emulate_tty=True,
+    )
+    
+    seguidor_linea = Node(
+        package='mcr2_puzzlebot',
+        executable='line_follower',
+        name='line_follower',
+        parameters=[config_file],
+        output='screen',
+        emulate_tty=True,
+    )
 
-
+    img_compressor = Node(
+        package='mcr2_puzzlebot',
+        executable='image_compressor',
+        name='image_compressor',
+        parameters=[config_file],
+        output='screen',
+        emulate_tty=True,
+    )
     controlador = Node(
         package='mcr2_puzzlebot',
         executable='line_follower_controller',
@@ -30,25 +54,10 @@ def generate_launch_description():
         emulate_tty=True,
     )
 
-    señales_dector = Node(
-        package='mcr2_puzzlebot',
-        executable='traffic_sign_detector',
-        name='traffic_sign_detector',
-        output='screen',
-        emulate_tty=True,
-    )
-
-    odometria = Node(
-        package='mcr2_puzzlebot',
-        executable='puzzlebot_odometry',
-        name='puzzlebot_odometry',
-        output='screen',
-        emulate_tty=True,
-    )
-
     return LaunchDescription([
         config_arg,
+        detector_semaforo,
+        seguidor_linea,
+        img_compressor,
         controlador,
-        señales_dector,
-        odometria,
     ])

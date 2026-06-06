@@ -2,10 +2,8 @@
 
 import rclpy
 from rclpy.node import Node
-
 from sensor_msgs.msg import Image
 from sensor_msgs.msg import CompressedImage
-
 import cv2
 import numpy as np
 
@@ -19,24 +17,27 @@ qos = QoSProfile(
     depth=1
 )
 
-
 class YoloImageCompressor(Node):
 
     def __init__(self):
         super().__init__('image_compressor')
 
+        self.declare_parameter('input_topic', '/video_source/raw')
+        self.declare_parameter('output_topic', '/video_source/yolo/compressed')
         self.declare_parameter('width',416)
         self.declare_parameter('height',416)
         self.declare_parameter('jpeg_quality',40)
         self.declare_parameter('grayscale',True)
 
+        input_topic = self.get_parameter('input_topic').value
+        output_topic = self.get_parameter('output_topic').value
         self.width = self.get_parameter('width').value
         self.height = self.get_parameter('height').value
         self.jpeg_quality = self.get_parameter('jpeg_quality').value
         self.grayscale = self.get_parameter('grayscale').value
 
-        self.sub = self.create_subscription(Image,'/video_source/raw',self.image_callback,10)
-        self.pub = self.create_publisher(CompressedImage,'/video_source/yolo/compressed',qos)
+        self.sub = self.create_subscription(Image,input_topic,self.image_callback,10)
+        self.pub = self.create_publisher(CompressedImage,output_topic,qos)
         self.get_logger().info('Yolo Image Compressor Started')
 
     def image_callback(self, msg):
@@ -63,6 +64,7 @@ class YoloImageCompressor(Node):
             self.get_logger().error(
                 f'Compression failed: {e}'
             )
+
 
 def main(args=None):
     rclpy.init(args=args)

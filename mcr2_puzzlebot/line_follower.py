@@ -14,16 +14,22 @@ class LineFollower(Node):
         super().__init__('line_follower')
 
         # PARAMETERS
-        self.declare_parameter('debug_view',True)
+        self.declare_parameter('camera_topic','/video_source/raw')
+        self.declare_parameter('line_error_topic','/line_error')
+        self.declare_parameter('intersection_topic','/intersection_detected')
+        self.declare_parameter('debug_view',False)
         self.declare_parameter('crop_percent', 0.25)
 
+        camera_topic = self.get_parameter('camera_topic').value
+        error_topic = self.get_parameter('line_error_topic').value
+        intersection_topic = self.get_parameter('intersection_topic').value
         self.debug_view = self.get_parameter('debug_view').value
         self.crop_percent = self.get_parameter('crop_percent').value
 
         # ROS
-        self.sub = self.create_subscription(Image,'/video_source/raw',self.image_callback,10)
-        self.pub_error = self.create_publisher(Float32,'/line_error',10)
-        self.pub_intersection = self.create_publisher(Bool,'/intersection_detected',10)
+        self.sub = self.create_subscription(Image,camera_topic,self.image_callback,10)
+        self.pub_error = self.create_publisher(Float32,error_topic,10)
+        self.pub_intersection = self.create_publisher(Bool,intersection_topic,10)
 
         # INTERNAL STATE
         self.last_error = 0.0
@@ -55,8 +61,8 @@ class LineFollower(Node):
         kernel = cv2.getStructuringElement(cv2.MORPH_RECT,(15,5))
         binary = cv2.erode(binary,kernel,iterations=3)
         binary = cv2.dilate(binary,kernel,iterations=3)
+
         # ROI PARA DETECTAR INTERSECCIÓN
-        # ROI PARA PÉRDIDA DE LÍNEA
         lost_roi = binary[int(roi_height * 0.88):,:]
         white_pixels = cv2.countNonZero(lost_roi)
         total_pixels = (lost_roi.shape[0] * lost_roi.shape[1])
@@ -108,27 +114,27 @@ class LineFollower(Node):
                     left = best_segment[0]
                     right = best_segment[-1]
 
-                    center_line = (left + right) // 2
+                center_line = (left + right) // 2
 
-                    error = (center_image - center_line)
-                    errors.append(error)
+                error = (center_image - center_line)
+                errors.append(error)
 
-                    valid_weights.append(weights[i])
+                valid_weights.append(weights[i])
 
-                    # DEBUG
-                    if self.debug_view:
+                # DEBUG
+                if self.debug_view:
 
-                        # línea horizontal
-                        cv2.line(output,(0, y),(roi_width, y),(0, 255, 255),1)
+                    # línea horizontal
+                    cv2.line(output,(0, y),(roi_width, y),(0, 255, 255),1)
 
-                        # borde izquierdo
-                        cv2.circle(output,(left, y),4,(0, 255, 0),-1)
+                    # borde izquierdo
+                    cv2.circle(output,(left, y),4,(0, 255, 0),-1)
 
-                        # borde derecho
-                        cv2.circle(output,(right, y),4,(255, 0, 0),-1)
+                    # borde derecho
+                    cv2.circle(output,(right, y),4,(255, 0, 0),-1)
 
-                        # centro línea
-                        cv2.circle(output,(center_line, y),4,(0, 0, 255),-1)
+                    # centro línea
+                    cv2.circle(output,(center_line, y),4,(0, 0, 255),-1)
 
         # CALCULAR ERROR FINAL
         if line_lost:
