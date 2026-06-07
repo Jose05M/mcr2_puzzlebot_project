@@ -16,23 +16,27 @@ class LineFollowerController(Node):
     def __init__(self):
         super().__init__('line_follower_controller')
 
-        self.declare_parameter('linear_speed', 0.15)
+        self.declare_parameter('linear_speed', 0.08)
         self.declare_parameter('curve_speed', 0.07)
-        self.declare_parameter('curve_threshold', 50.0)
+        self.declare_parameter('curve_threshold', 60.0)
 
-        self.declare_parameter('kp_straight', 0.0015)
+        self.declare_parameter('kp_straight', 0.0012)
         self.declare_parameter('kp_curve', 0.0040)
         self.declare_parameter('kd', 0.0030)
 
         self.declare_parameter('max_angular_vel', 1.5)
         self.declare_parameter('alpha', 0.5)
+        self.declare_parameter('turn_linear', 0.13)
+        self.declare_parameter('turn_angular', 0.8)
+        self.declare_parameter('straight_dist', 0.25)
+        self.declare_parameter('special_duration',3.0)
 
-        self.declare_parameter('cmd_vel_topic',    '/cmd_vel')
-        self.declare_parameter('line_error_topic', '/line_error')
-        self.declare_parameter('state_topic',      '/traffic_light/state')
-        self.declare_parameter('signal_topic',      '/traffic_sign/state')
-        self.declare_parameter('odom_topic',      '/odm')
-        self.declare_parameter('activate_cmd',      '/fsm_command')
+        self.declare_parameter('cmd_vel_topic',         '/cmd_vel')
+        self.declare_parameter('line_error_topic',      '/line_error')
+        self.declare_parameter('state_topic',           '/traffic_light/state')
+        self.declare_parameter('signal_topic',          '/traffic_sign/state')
+        self.declare_parameter('odom_topic',            '/odom')
+        self.declare_parameter('activate_cmd',          '/fsm_command')
         self.declare_parameter('intersection_topic',    '/intersection_detected')
 
         self.linear_speed = self.get_parameter('linear_speed').value
@@ -45,6 +49,10 @@ class LineFollowerController(Node):
 
         self.w_max = self.get_parameter('max_angular_vel').value
         self.alpha = self.get_parameter('alpha').value
+        self.turn_linear_speed = self.get_parameter('turn_linear').value
+        self.turn_angular_speed = self.get_parameter('turn_angular').value
+        self.straight_distance = self.get_parameter('straight_dist').value
+        self.special_duration = self.get_parameter('special_duration').value
 
         cmd_topic   = self.get_parameter('cmd_vel_topic').value
         state_topic = self.get_parameter('state_topic').value
@@ -72,8 +80,6 @@ class LineFollowerController(Node):
         self.current_y = 0.0
         self.start_x = 0.0
         self.start_y = 0.0
-        self.straight_distance = 0.5
-
 
         # FSM modes:
         # FOLLOW
@@ -83,14 +89,16 @@ class LineFollowerController(Node):
         # STOPPED
         self.mode = "FOLLOW"
 
-        # velocidad de maniobra
-        self.turn_linear_speed = 0.08
-        self.turn_angular_speed = 0.8
-
         self.pending_action = "NONE"
         self.special_behavior = "NONE"
         self.special_start_time = None
-        self.special_duration = 5.0
+
+        # Detener zebra
+        self.intersection_lock = False
+        self.waiting_at_intersection = False
+
+        self.stop_start_time = None
+        self.stop_duration = 1.5
 
         # ROS I/O
         self.pub_vel  = self.create_publisher(Twist, cmd_topic, 10)
@@ -152,18 +160,29 @@ class LineFollowerController(Node):
             self.get_logger().info("Entering STOPPED mode")
             return
         # FOLLOW -> TURN
-        if (self.mode == "FOLLOW" and self.zebra_crossing and self.pending_action in ["LEFT","RIGHT"]):
-            self.mode = "TURN"
-            self.start_x = self.current_x
-            self.start_y = self.current_y
-            self.get_logger().info(f"Entering TURN mode: {self.pending_action}")
+        if (self.mode == "FOLLOW" and self.zebra_crossing and not self.intersection_lock and self.pending_action in ["LEFT","RIGHT"]):
+            self.intersection_lock = True
+            self.mode = "WAIT_INTERSECTION"
+            self.stop_start_time = self.current_time
+
+            self.twist.linear.x = 0.0
+            self.twist.angular.z = 0.0
+
+            self.get_logger().info("Zebra crossing detected")
+
+            return
 
         # FOLLOW -> STRAIGHT
-        elif (self.mode == "FOLLOW" and self.zebra_crossing and self.pending_action == "STRAIGHT"):
-            self.mode = "STRAIGHT"
-            self.start_x = self.current_x
-            self.start_y = self.current_y
-            self.get_logger().info("Entering STRAIGHT mode")
+        elif (self.mode == "FOLLOW" and self.zebra_crossing and not self.intersection_lock and self.pending_action == "STRAIGHT"):
+            self.intersection_lock = True
+            self.mode = "WAIT_INTERSECTION"
+            self.stop_start_time = self.current_time
+
+            self.twist.linear.x = 0.0
+            self.twist.angular.z = 0.0
+
+            self.get_logger().info("Zebra crossing detected")
+            return
 
         # FOLLOW -> SPECIAL
         elif (self.mode == "FOLLOW" and self.special_behavior != "NONE"):
@@ -188,7 +207,7 @@ class LineFollowerController(Node):
             self.twist.angular.z = -self.turn_angular_speed
 
         # terminar maniobra
-        if distance >= 0.35:
+        if distance >= 0.15:
 
             self.twist.linear.x = 0.0
             self.twist.angular.z = 0.0
@@ -196,6 +215,7 @@ class LineFollowerController(Node):
             self.pending_action = "NONE"
             self.mode = "FOLLOW"
             self.zebra_crossing = False
+            self.intersection_lock = False
 
             self.prev_error = 0.0
             self.line_error = 0.0
@@ -211,6 +231,7 @@ class LineFollowerController(Node):
             self.pending_action = "NONE"
             self.mode = "FOLLOW"
             self.zebra_crossing = False
+            self.intersection_lock = False
             self.get_logger().info("Straight completed")
 
     def handle_stop_mode(self):
@@ -220,14 +241,8 @@ class LineFollowerController(Node):
     def handle_special_mode(self):
         speed_multiplier = 1.0
         elapsed = (self.current_time - self.special_start_time)
-        if self.special_behavior == "WORKERS":
+        if self.special_behavior == "WORKERS" or self.special_behavior == "GIVE_WAY" or self.special_behavior == "ROUND":
             speed_multiplier = 0.5
-
-        elif self.special_behavior == "GIVE_WAY":
-            speed_multiplier = 0.4
-
-        elif self.special_behavior == "ROUND":
-            speed_multiplier = 0.3
 
         self.handle_follow_mode(speed_multiplier)
 
@@ -295,6 +310,25 @@ class LineFollowerController(Node):
         self.twist.linear.x = linear_vel
         self.twist.angular.z = angular_vel
 
+    def handle_wait_intersection(self):
+
+        self.twist.linear.x = 0.0
+        self.twist.angular.z = 0.0
+
+        elapsed = (self.current_time - self.stop_start_time)
+
+        if elapsed >= self.stop_duration:
+            self.start_x = self.current_x
+            self.start_y = self.current_y
+
+            if self.pending_action in ["LEFT","RIGHT"]:
+                self.mode = "TURN"
+
+            elif self.pending_action == "STRAIGHT":
+                self.mode = "STRAIGHT"
+
+            self.get_logger().info(f"Executing: {self.pending_action}")
+
     def _control_loop(self):
         self.twist = Twist()
         self.current_time = (self.get_clock().now().nanoseconds / 1e9)
@@ -305,6 +339,9 @@ class LineFollowerController(Node):
         # MODES
         if self.mode == "TURN":
             self.handle_turn_mode()
+
+        elif self.mode == "WAIT_INTERSECTION":
+            self.handle_wait_intersection()
 
         elif self.mode == "STRAIGHT":
             self.handle_straight_mode()
