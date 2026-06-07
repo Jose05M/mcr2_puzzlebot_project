@@ -21,14 +21,14 @@ class LineFollowerController(Node):
         self.declare_parameter('curve_threshold', 60.0)
 
         self.declare_parameter('kp_straight', 0.0012)
-        self.declare_parameter('kp_curve', 0.0040)
+        self.declare_parameter('kp_curve', 0.0045)
         self.declare_parameter('kd', 0.0030)
 
         self.declare_parameter('max_angular_vel', 1.5)
         self.declare_parameter('alpha', 0.5)
         self.declare_parameter('turn_linear', 0.13)
-        self.declare_parameter('turn_angular', 0.8)
-        self.declare_parameter('straight_dist', 0.25)
+        self.declare_parameter('turn_angular', 0.5)
+        self.declare_parameter('straight_dist', 0.45)
         self.declare_parameter('special_duration',3.0)
 
         self.declare_parameter('cmd_vel_topic',         '/cmd_vel')
@@ -95,8 +95,6 @@ class LineFollowerController(Node):
 
         # Detener zebra
         self.intersection_lock = False
-        self.waiting_at_intersection = False
-
         self.stop_start_time = None
         self.stop_duration = 1.5
 
@@ -207,7 +205,7 @@ class LineFollowerController(Node):
             self.twist.angular.z = -self.turn_angular_speed
 
         # terminar maniobra
-        if distance >= 0.15:
+        if distance >= 0.25:
 
             self.twist.linear.x = 0.0
             self.twist.angular.z = 0.0
@@ -228,6 +226,8 @@ class LineFollowerController(Node):
         distance = np.sqrt((self.current_x - self.start_x)**2 + (self.current_y - self.start_y)**2)
 
         if distance >= self.straight_distance:
+            self.prev_error = 0.0
+            self.line_error = 0.0
             self.pending_action = "NONE"
             self.mode = "FOLLOW"
             self.zebra_crossing = False
@@ -382,7 +382,6 @@ class LineFollowerController(Node):
 
         elif self.tl_state == "YELLOW":
             self.twist.linear.x *= 0.5
-            self.twist.angular.z = 0.0
 
         self.pub_vel.publish(self.twist)
 

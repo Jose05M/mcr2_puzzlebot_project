@@ -56,7 +56,7 @@ class YoloInference(Node):
     def __init__(self):
         super().__init__('traffic_sign_detector')
         self.declare_parameter('model_path','/home/ed/Downloads/yolo_train/best_1.pt')
-        self.declare_parameter('min_area',30000)
+        self.declare_parameter('min_area',20000)
         self.declare_parameter('max_area',80000)
         self.declare_parameter('debug_view',True)
 

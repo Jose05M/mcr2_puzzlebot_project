@@ -62,12 +62,21 @@ class LineFollower(Node):
         binary = cv2.erode(binary,kernel,iterations=3)
         binary = cv2.dilate(binary,kernel,iterations=3)
 
-        # ROI PARA DETECTAR INTERSECCIÓN
-        lost_roi = binary[int(roi_height * 0.88):,:]
-        white_pixels = cv2.countNonZero(lost_roi)
-        total_pixels = (lost_roi.shape[0] * lost_roi.shape[1])
-        white_ratio = white_pixels / total_pixels
-        line_lost = white_ratio < 0.1
+        # ==========================================
+        # ZEBRA CROSSING DETECTION
+        # ==========================================
+        zebra_roi = binary[int(roi_height * 0.75):int(roi_height * 0.95),:]
+
+        # sumar pixeles blancos por fila
+        horizontal_histogram = np.sum(zebra_roi == 255,axis=1)
+
+        # filas con mucho blanco
+        white_rows = horizontal_histogram > (zebra_roi.shape[1] * 0.5)
+
+        # contar transiciones blanco/negro
+        transitions = np.sum(np.diff(white_rows.astype(np.int32)) != 0)
+        # zebra crossing detectado
+        zebra_crossing = transitions >= 6
 
         # SCANLINES
         scan_rows = [int(roi_height * 0.80), int(roi_height * 0.84), int(roi_height * 0.88), int(roi_height * 0.92), int(roi_height * 0.96)]
@@ -137,7 +146,7 @@ class LineFollower(Node):
                     cv2.circle(output,(center_line, y),4,(0, 0, 255),-1)
 
         # CALCULAR ERROR FINAL
-        if line_lost:
+        if zebra_crossing:
             final_error = 0.0
 
         else:
