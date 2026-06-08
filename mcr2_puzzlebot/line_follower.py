@@ -6,7 +6,18 @@ import numpy as np
 
 from rclpy.node import Node
 from sensor_msgs.msg import Image
+from sensor_msgs.msg import CompressedImage
 from std_msgs.msg import Float32, Bool
+
+from rclpy.qos import QoSProfile
+from rclpy.qos import ReliabilityPolicy
+from rclpy.qos import HistoryPolicy
+
+qos = QoSProfile(
+    reliability=ReliabilityPolicy.BEST_EFFORT,
+    history=HistoryPolicy.KEEP_LAST,
+    depth=1
+)
 
 class LineFollower(Node):
 
@@ -14,7 +25,7 @@ class LineFollower(Node):
         super().__init__('line_follower')
 
         # PARAMETERS
-        self.declare_parameter('camera_topic','/video_source/raw')
+        self.declare_parameter('camera_topic','/video_source/yolo/compressed')
         self.declare_parameter('line_error_topic','/line_error')
         self.declare_parameter('intersection_topic','/intersection_detected')
         self.declare_parameter('debug_view',True)
@@ -27,7 +38,7 @@ class LineFollower(Node):
         self.crop_percent = self.get_parameter('crop_percent').value
 
         # ROS
-        self.sub = self.create_subscription(Image,camera_topic,self.image_callback,10)
+        self.sub = self.create_subscription(CompressedImage,camera_topic,self.image_callback,qos)
         self.pub_error = self.create_publisher(Float32,error_topic,10)
         self.pub_intersection = self.create_publisher(Bool,intersection_topic,10)
 
@@ -37,7 +48,10 @@ class LineFollower(Node):
 
     # IMAGE CALLBACK
     def image_callback(self, msg):
-        frame = np.frombuffer(msg.data,dtype=np.uint8).reshape((msg.height, msg.width, 3))
+        #frame = np.frombuffer(msg.data,dtype=np.uint8).reshape((msg.height, msg.width, 3))
+        #frame = cv2.resize(frame,(640, 480))
+        np_arr = np.frombuffer( msg.data, np.uint8 )
+        frame = cv2.imdecode( np_arr, cv2.IMREAD_COLOR )
         frame = cv2.resize(frame,(640, 480))
 
         height, width = frame.shape[:2]
@@ -62,21 +76,12 @@ class LineFollower(Node):
         binary = cv2.erode(binary,kernel,iterations=3)
         binary = cv2.dilate(binary,kernel,iterations=3)
 
-        # ==========================================
-        # ZEBRA CROSSING DETECTION
-        # ==========================================
-        zebra_roi = binary[int(roi_height * 0.75):int(roi_height * 0.95),:]
-
-        # sumar pixeles blancos por fila
-        horizontal_histogram = np.sum(zebra_roi == 255,axis=1)
-
-        # filas con mucho blanco
-        white_rows = horizontal_histogram > (zebra_roi.shape[1] * 0.5)
-
-        # contar transiciones blanco/negro
-        transitions = np.sum(np.diff(white_rows.astype(np.int32)) != 0)
-        # zebra crossing detectado
-        zebra_crossing = transitions >= 6
+        # ROI PARA DETECTAR INTERSECCIÓN
+        lost_roi = binary[int(roi_height * 0.88):,:]
+        white_pixels = cv2.countNonZero(lost_roi)
+        total_pixels = (lost_roi.shape[0] * lost_roi.shape[1])
+        white_ratio = white_pixels / total_pixels
+        line_lost = white_ratio < 0.1
 
         # SCANLINES
         scan_rows = [int(roi_height * 0.80), int(roi_height * 0.84), int(roi_height * 0.88), int(roi_height * 0.92), int(roi_height * 0.96)]
@@ -146,7 +151,7 @@ class LineFollower(Node):
                     cv2.circle(output,(center_line, y),4,(0, 0, 255),-1)
 
         # CALCULAR ERROR FINAL
-        if zebra_crossing:
+        if line_lost:
             final_error = 0.0
 
         else:

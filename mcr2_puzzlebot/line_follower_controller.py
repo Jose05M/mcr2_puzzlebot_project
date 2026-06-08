@@ -80,6 +80,12 @@ class LineFollowerController(Node):
         self.current_y = 0.0
         self.start_x = 0.0
         self.start_y = 0.0
+        self.current_heading = 0.0
+        self.turn_phase = "NONE"
+        self.turn_forward_distance = 0.12
+        self.turn_exit_distance = 0.10
+        self.turn_target_heading = 0.0
+        
 
         # FSM modes:
         # FOLLOW
@@ -122,9 +128,15 @@ class LineFollowerController(Node):
     def _intersection_callback(self, msg):
         self.zebra_crossing = msg.data
 
-    def _odom_callback(self, msg):
-        self.current_x = (msg.pose.pose.position.x)
-        self.current_y = (msg.pose.pose.position.y)
+    def _odom_callback(self, msg: Odometry):
+        self.current_x = msg.pose.pose.position.x
+        self.current_y = msg.pose.pose.position.y
+        q = msg.pose.pose.orientation
+        # Quaternion → yaw (rotation around Z)
+        siny_cosp = 2.0 * (q.w * q.z + q.x * q.y)
+        cosy_cosp = 1.0 - 2.0 * (q.y * q.y + q.z * q.z)
+        self.current_heading = np.arctan2(siny_cosp,cosy_cosp)
+
 
     def _fsm_command_callback(self, msg):
         command = msg.data
@@ -189,36 +201,92 @@ class LineFollowerController(Node):
             self.get_logger().info(f"Entering SPECIAL mode: {self.special_behavior}")
 
     def handle_turn_mode(self):
+        if self.turn_phase == "NONE":
+            self.turn_phase = "FORWARD"
+
+            self.start_x = self.current_x
+            self.start_y = self.current_y
+
         # distancia recorrida
-        distance = np.sqrt(
-            (self.current_x - self.start_x)**2 +
-            (self.current_y - self.start_y)**2
-        )
+        distance = np.sqrt((self.current_x - self.start_x)**2 + (self.current_y - self.start_y)**2)
 
-        # avance mientras gira
-        self.twist.linear.x = self.turn_linear_speed
-
-        if self.pending_action == "LEFT":
-            self.twist.angular.z = self.turn_angular_speed
-
-        elif self.pending_action == "RIGHT":
-            self.twist.angular.z = -self.turn_angular_speed
-
-        # terminar maniobra
-        if distance >= 0.25:
-
-            self.twist.linear.x = 0.0
+        if self.turn_phase == "FORWARD":
+            self.twist.linear.x = 0.10
             self.twist.angular.z = 0.0
 
-            self.pending_action = "NONE"
-            self.mode = "FOLLOW"
-            self.zebra_crossing = False
-            self.intersection_lock = False
+            # avanzar antes de girar
+            if distance >= 0.12:
+                self.twist.linear.x = 0.0
 
-            self.prev_error = 0.0
-            self.line_error = 0.0
+                # guardar heading inicial
+                self.turn_start_heading = (self.current_heading)
 
-            self.get_logger().info("Turn completed")
+                # calcular target
+                if self.pending_action == "LEFT":
+                    self.turn_target_heading = (self.turn_start_heading + np.pi/2)
+
+                elif self.pending_action == "RIGHT":
+                    self.turn_target_heading = (self.turn_start_heading - np.pi/2)
+
+                # normalizar
+                self.turn_target_heading = np.arctan2(np.sin(self.turn_target_heading),np.cos(self.turn_target_heading))
+                self.turn_phase = "ROTATE"
+                self.get_logger().info("Starting rotation")
+
+        elif self.turn_phase == "ROTATE":
+
+            heading_error = np.arctan2(
+                np.sin(
+                    self.turn_target_heading -
+                    self.current_heading
+                ),
+                np.cos(
+                    self.turn_target_heading -
+                    self.current_heading
+                )
+            )
+
+            angular_vel = 0.8 * heading_error
+            angular_vel = np.clip(angular_vel, -0.5,0.5)
+            self.twist.linear.x = 0.0
+            self.twist.angular.z = angular_vel
+
+            # terminó giro
+            if abs(heading_error) < np.deg2rad(5):
+
+                self.twist.angular.z = 0.0
+
+                # limpiar PD follower
+                self.prev_error = 0.0
+                self.line_error = 0.0
+
+                self.start_x = self.current_x
+                self.start_y = self.current_y
+
+                self.turn_phase = "EXIT"
+
+                self.get_logger().info(
+                    "Rotation completed"
+                )
+
+        elif self.turn_phase == "EXIT":
+            self.twist.linear.x = 0.08
+            self.twist.angular.z = 0.0
+
+            # distancia después del giro
+            exit_distance = np.sqrt((self.current_x - self.start_x)**2 +(self.current_y - self.start_y)**2)
+
+            if exit_distance >= 0.10:
+                self.twist.linear.x = 0.0
+                self.pending_action = "NONE"
+                self.mode = "FOLLOW"
+                self.turn_phase = "NONE"
+                self.zebra_crossing = False
+                self.intersection_lock = False
+                self.prev_error = 0.0
+                self.line_error = 0.0
+
+                self.get_logger().info("Turn completed")
 
     def handle_straight_mode(self):
         self.twist.linear.x = 0.10

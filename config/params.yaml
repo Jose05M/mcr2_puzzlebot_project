@@ -2,41 +2,12 @@ line_follower:
   ros__parameters:
 
     # TOPICS
-    camera_topic: /video_source/raw
+    camera_topic: /video_source/yolo/compressed
     line_error_topic: /line_error
     debug_view: false
 
     # ROI
-    crop_percent: 0.25
-
-line_follower_controller:
-  ros__parameters:
-
-    # SPEEDS
-    linear_speed: 0.15
-    curve_speed: 0.07
-
-    turn_linear: 0.13
-    turn_angular: 0.8
-    straight_dist: 0.25
-
-    # CURVE DETECTION
-    curve_threshold: 50.0
-
-    # CONTROLLER
-    kp_straight: 0.0015
-    kp_curve: 0.0040
-    kd: 0.0030
-
-    # LIMITS
-    max_angular_vel: 1.5
-    # FILTER
-    alpha: 0.5
-
-    # TOPICS
-    cmd_vel_topic: /cmd_vel
-    line_error_topic: /line_error
-    state_topic: /traffic_light/state
+    crop_percent: 0.20
 
 traffic_light_detector:
   ros__parameters:
