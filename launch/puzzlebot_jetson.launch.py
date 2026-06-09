@@ -63,7 +63,6 @@ def generate_launch_description():
 
     return LaunchDescription([
         config_arg,
-        seguidor_linea,
         controlador,
         odometria,
     ])

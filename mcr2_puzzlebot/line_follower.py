@@ -29,7 +29,7 @@ class LineFollower(Node):
         self.declare_parameter('line_error_topic','/line_error')
         self.declare_parameter('intersection_topic','/intersection_detected')
         self.declare_parameter('debug_view',True)
-        self.declare_parameter('crop_percent', 0.25)
+        self.declare_parameter('crop_percent', 0.20)
 
         camera_topic = self.get_parameter('camera_topic').value
         error_topic = self.get_parameter('line_error_topic').value

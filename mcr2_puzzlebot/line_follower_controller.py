@@ -26,10 +26,8 @@ class LineFollowerController(Node):
 
         self.declare_parameter('max_angular_vel', 1.5)
         self.declare_parameter('alpha', 0.5)
-        self.declare_parameter('turn_linear', 0.13)
-        self.declare_parameter('turn_angular', 0.5)
         self.declare_parameter('straight_dist', 0.45)
-        self.declare_parameter('special_duration',3.0)
+        self.declare_parameter('special_duration',6.0)
 
         self.declare_parameter('cmd_vel_topic',         '/cmd_vel')
         self.declare_parameter('line_error_topic',      '/line_error')
@@ -49,8 +47,6 @@ class LineFollowerController(Node):
 
         self.w_max = self.get_parameter('max_angular_vel').value
         self.alpha = self.get_parameter('alpha').value
-        self.turn_linear_speed = self.get_parameter('turn_linear').value
-        self.turn_angular_speed = self.get_parameter('turn_angular').value
         self.straight_distance = self.get_parameter('straight_dist').value
         self.special_duration = self.get_parameter('special_duration').value
 
@@ -82,11 +78,8 @@ class LineFollowerController(Node):
         self.start_y = 0.0
         self.current_heading = 0.0
         self.turn_phase = "NONE"
-        self.turn_forward_distance = 0.12
-        self.turn_exit_distance = 0.10
         self.turn_target_heading = 0.0
         
-
         # FSM modes:
         # FOLLOW
         # TURN
@@ -167,23 +160,12 @@ class LineFollowerController(Node):
         #STOP
         if self.pending_action == "STOP" and self.mode != "STOPPED":
             self.mode = "STOPPED"
+            self.stop_start_time = (self.current_time)
             self.get_logger().info("Entering STOPPED mode")
             return
-        # FOLLOW -> TURN
-        if (self.mode == "FOLLOW" and self.zebra_crossing and not self.intersection_lock and self.pending_action in ["LEFT","RIGHT"]):
-            self.intersection_lock = True
-            self.mode = "WAIT_INTERSECTION"
-            self.stop_start_time = self.current_time
-
-            self.twist.linear.x = 0.0
-            self.twist.angular.z = 0.0
-
-            self.get_logger().info("Zebra crossing detected")
-
-            return
-
-        # FOLLOW -> STRAIGHT
-        elif (self.mode == "FOLLOW" and self.zebra_crossing and not self.intersection_lock and self.pending_action == "STRAIGHT"):
+        
+        # FOLLOW -> WWAIT_INTERSECTION
+        if (self.mode == "FOLLOW" and self.zebra_crossing and not self.intersection_lock and self.pending_action in ["LEFT","RIGHT","STRAIGHT"]):
             self.intersection_lock = True
             self.mode = "WAIT_INTERSECTION"
             self.stop_start_time = self.current_time
@@ -199,6 +181,7 @@ class LineFollowerController(Node):
             self.mode = "SPECIAL"
             self.special_start_time = (self.current_time)
             self.get_logger().info(f"Entering SPECIAL mode: {self.special_behavior}")
+            return
 
     def handle_turn_mode(self):
         if self.turn_phase == "NONE":
@@ -215,7 +198,7 @@ class LineFollowerController(Node):
             self.twist.angular.z = 0.0
 
             # avanzar antes de girar
-            if distance >= 0.12:
+            if distance >= 0.40:
                 self.twist.linear.x = 0.0
 
                 # guardar heading inicial
@@ -223,10 +206,10 @@ class LineFollowerController(Node):
 
                 # calcular target
                 if self.pending_action == "LEFT":
-                    self.turn_target_heading = (self.turn_start_heading + np.pi/2)
+                    self.turn_target_heading = (self.turn_start_heading + np.pi/2 + np.pi/13)
 
                 elif self.pending_action == "RIGHT":
-                    self.turn_target_heading = (self.turn_start_heading - np.pi/2)
+                    self.turn_target_heading = (self.turn_start_heading - np.pi/2 - np.pi/13)
 
                 # normalizar
                 self.turn_target_heading = np.arctan2(np.sin(self.turn_target_heading),np.cos(self.turn_target_heading))
@@ -247,7 +230,7 @@ class LineFollowerController(Node):
             )
 
             angular_vel = 0.8 * heading_error
-            angular_vel = np.clip(angular_vel, -0.5,0.5)
+            angular_vel = np.clip(angular_vel, -1.5,1.5)
             self.twist.linear.x = 0.0
             self.twist.angular.z = angular_vel
 
@@ -296,6 +279,8 @@ class LineFollowerController(Node):
         if distance >= self.straight_distance:
             self.prev_error = 0.0
             self.line_error = 0.0
+            self.twist.linear.x = 0.0
+            self.twist.angular.z = 0.0
             self.pending_action = "NONE"
             self.mode = "FOLLOW"
             self.zebra_crossing = False
@@ -303,21 +288,70 @@ class LineFollowerController(Node):
             self.get_logger().info("Straight completed")
 
     def handle_stop_mode(self):
-        self.twist.linear.x = 0.0
-        self.twist.angular.z = 0.0
+        elapsed = (self.current_time - self.stop_start_time)
+        self.handle_follow_mode(1.0)
+        if elapsed >= 6.0:
+            self.twist.linear.x = 0.0
+            self.twist.angular.z = 0.0
+
 
     def handle_special_mode(self):
-        speed_multiplier = 1.0
         elapsed = (self.current_time - self.special_start_time)
-        if self.special_behavior == "WORKERS" or self.special_behavior == "GIVE_WAY" or self.special_behavior == "ROUND":
-            speed_multiplier = 0.5
 
-        self.handle_follow_mode(speed_multiplier)
+        if self.special_behavior == "WORKERS":
+            if elapsed >= 4.0:
+                speed_multiplier = 0.5
+            else:
+                speed_multiplier = 1.0
 
-        if elapsed >= self.special_duration:
+            self.handle_follow_mode(speed_multiplier)
+            self.twist.angular.z *= 0.7
+
+        elif self.special_behavior == "ROUND":
+            if elapsed >= 4.0:
+                speed_multiplier = 0.45
+            else:
+                speed_multiplier = 1.0
+            self.handle_follow_mode(speed_multiplier)
+            self.twist.angular.z *= 1.2
+
+        elif self.special_behavior == "GIVE_WAY":
+
+            # antes de la intersección
+            if not self.zebra_crossing:
+                speed_multiplier = 0.5
+
+                self.handle_follow_mode(speed_multiplier)
+
+            # llegó al zebra crossing
+            else:
+                # guardar tiempo SOLO UNA VEZ
+                if not self.intersection_lock:
+                    self.intersection_lock = True
+                    self.stop_start_time = (self.current_time)
+
+                self.twist.linear.x = 0.0
+                self.twist.angular.z = 0.0
+
+                stop_elapsed = (self.current_time - self.stop_start_time)
+
+                # esperar 2 segundos
+                if stop_elapsed >= 2.0:
+                    self.special_behavior = "NONE"
+                    self.start_x = self.current_x
+                    self.start_y = self.current_y
+                    self.mode = "STRAIGHT"
+                    self.pending_action = "STRAIGHT"
+                    self.zebra_crossing = False
+                    self.intersection_lock = False
+                    self.get_logger().info("Give way completed")
+
+        if ( self.special_behavior != "GIVE_WAY" and elapsed >= self.special_duration):
             self.special_behavior = "NONE"
             self.mode = "FOLLOW"
-            self.get_logger().info("Special mode completed")
+            self.intersection_lock = False
+            self.get_logger().info("Special behavior completed")
+
 
     def handle_follow_mode(self,speed_multiplier=1.0):
 
@@ -384,7 +418,13 @@ class LineFollowerController(Node):
         self.twist.angular.z = 0.0
 
         elapsed = (self.current_time - self.stop_start_time)
+        # esperar semáforo verde
+        if self.tl_state == "RED":
 
+            self.twist.linear.x = 0.0
+            self.twist.angular.z = 0.0
+
+            return
         if elapsed >= self.stop_duration:
             self.start_x = self.current_x
             self.start_y = self.current_y
@@ -441,15 +481,14 @@ class LineFollowerController(Node):
             self.get_logger().info(motion_state)
             self.last_motion_state = motion_state
 
-        # publish
-        # SEGURIDAD GLOBAL SEMÁFORO
+        if self.mode == "FOLLOW":
 
-        if self.tl_state == "RED":
-            self.twist.linear.x = 0.0
-            self.twist.angular.z = 0.0
+            if self.tl_state == "RED":
+                self.twist.linear.x = 0.0
+                self.twist.angular.z = 0.0
 
-        elif self.tl_state == "YELLOW":
-            self.twist.linear.x *= 0.5
+            elif self.tl_state == "YELLOW":
+                self.twist.linear.x *= 0.5
 
         self.pub_vel.publish(self.twist)
 
