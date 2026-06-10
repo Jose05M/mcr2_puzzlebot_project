@@ -63,6 +63,7 @@ def generate_launch_description():
 
     return LaunchDescription([
         config_arg,
-        detector_semaforo,
-        img_compressor,
+        controlador,
+        odometria,
+        seguidor_linea,
     ])
