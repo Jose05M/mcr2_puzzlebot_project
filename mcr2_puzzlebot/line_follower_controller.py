@@ -17,17 +17,17 @@ class LineFollowerController(Node):
         super().__init__('line_follower_controller')
 
         self.declare_parameter('linear_speed', 0.08)
-        self.declare_parameter('curve_speed', 0.07)
+        self.declare_parameter('curve_speed', 0.10)
         self.declare_parameter('curve_threshold', 60.0)
 
         self.declare_parameter('kp_straight', 0.0012)
-        self.declare_parameter('kp_curve', 0.0045)
+        self.declare_parameter('kp_curve', 0.0040)
         self.declare_parameter('kd', 0.0030)
 
         self.declare_parameter('max_angular_vel', 1.5)
         self.declare_parameter('alpha', 0.5)
         self.declare_parameter('straight_dist', 0.45)
-        self.declare_parameter('special_duration',6.0)
+        self.declare_parameter('special_duration',8.0)
 
         self.declare_parameter('cmd_vel_topic',         '/cmd_vel')
         self.declare_parameter('line_error_topic',      '/line_error')
@@ -272,6 +272,13 @@ class LineFollowerController(Node):
                 self.get_logger().info("Turn completed")
 
     def handle_straight_mode(self):
+        # esperar semáforo verde
+        if self.tl_state == "RED":
+
+            self.twist.linear.x = 0.0
+            self.twist.angular.z = 0.0
+            return
+
         self.twist.linear.x = 0.10
         self.twist.angular.z = 0.0
         distance = np.sqrt((self.current_x - self.start_x)**2 + (self.current_y - self.start_y)**2)
@@ -296,6 +303,13 @@ class LineFollowerController(Node):
 
 
     def handle_special_mode(self):
+        # esperar semáforo verde
+        if self.tl_state == "RED":
+
+            self.twist.linear.x = 0.0
+            self.twist.angular.z = 0.0
+            return
+
         elapsed = (self.current_time - self.special_start_time)
 
         if self.special_behavior == "WORKERS":

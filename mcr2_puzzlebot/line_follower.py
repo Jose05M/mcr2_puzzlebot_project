@@ -118,6 +118,11 @@ class LineFollower(Node):
                     if segment_size < 20:
                         continue
 
+                    segment_width = (segment[-1] - segment[0])
+                    # ignorar blobs gigantes
+                    if segment_width > (roi_width * 0.7):
+                        continue
+
                     # elegir el más grande
                     if segment_size > largest_size:
                         largest_size = segment_size
@@ -128,27 +133,27 @@ class LineFollower(Node):
                     left = best_segment[0]
                     right = best_segment[-1]
 
-                center_line = (left + right) // 2
+                    center_line = (left + right) // 2
 
-                error = (center_image - center_line)
-                errors.append(error)
+                    error = (center_image - center_line)
+                    errors.append(error)
 
-                valid_weights.append(weights[i])
+                    valid_weights.append(weights[i])
 
-                # DEBUG
-                if self.debug_view:
+                    # DEBUG
+                    if self.debug_view:
 
-                    # línea horizontal
-                    cv2.line(output,(0, y),(roi_width, y),(0, 255, 255),1)
+                        # línea horizontal
+                        cv2.line(output,(0, y),(roi_width, y),(0, 255, 255),1)
 
-                    # borde izquierdo
-                    cv2.circle(output,(left, y),4,(0, 255, 0),-1)
+                        # borde izquierdo
+                        cv2.circle(output,(left, y),4,(0, 255, 0),-1)
 
-                    # borde derecho
-                    cv2.circle(output,(right, y),4,(255, 0, 0),-1)
+                        # borde derecho
+                        cv2.circle(output,(right, y),4,(255, 0, 0),-1)
 
-                    # centro línea
-                    cv2.circle(output,(center_line, y),4,(0, 0, 255),-1)
+                        # centro línea
+                        cv2.circle(output,(center_line, y),4,(0, 0, 255),-1)
 
         # CALCULAR ERROR FINAL
         if line_lost:

@@ -26,7 +26,6 @@ image_compressor:
   ros__parameters:
 
     input_topic: /video_source/raw
-
     output_topic: /video_source/yolo/compressed
 
     width: 416
