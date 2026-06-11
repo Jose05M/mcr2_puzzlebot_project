@@ -388,6 +388,9 @@ mcr2_puzzlebot/
 
 # Authors
 José Eduardo Sánchez Martínez
+
 Cesar Arellano
+
 Josue Ureña
+
 Rafael Gamiz
