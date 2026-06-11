@@ -150,7 +150,6 @@ class YoloInference(Node):
                         best_area = area
                         best_label = label
 
-            # TEXTO FRONT
             if self.debug_view:
 
                 annotated_frame = results[0].plot()

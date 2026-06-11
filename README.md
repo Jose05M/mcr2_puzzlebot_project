@@ -179,9 +179,7 @@ The resulting error is published on:
 /line_error
 ```
 
----
-
-# Zebra Crossing Detection
+Zebra Crossing Detection
 
 Intersections are detected by monitoring the amount of white pixels in a Region of Interest located at the bottom of the image.
 
@@ -287,19 +285,122 @@ This significantly reduces bandwidth consumption while preserving enough informa
 
 ---
 
+# Line Following Controller
+
+The line following controller receives the lateral error from the vision system through:
+
+```text
+/line_error
+```
+
+A PD controller is used to compute the angular velocity required to keep the robot centered on the lane.
+
+## Control Law
+
+The angular velocity is computed as:
+
+```text
+ω = Kp·e + Kd·de/dt
+```
+
+where:
+
+- `e` is the lateral line error.
+- `Kp` is the proportional gain.
+- `Kd` is the derivative gain.
+
+The derivative term is clipped to reduce the effect of sudden measurement spikes.
+
+---
+
+## Adaptive Gains
+
+Different proportional gains are used depending on whether the robot is navigating a straight segment or a curve.
+
+### Straight Segments
+
+```text
+Kp = kp_straight
+```
+
+### Curves
+
+```text
+Kp = kp_curve
+```
+
+Curves are detected when:
+
+```text
+|line_error| > curve_threshold
+```
+
+This allows the robot to react more aggressively during turns while maintaining smooth behavior on straight roads.
+
+---
+
+## Adaptive Speed Control
+
+The robot dynamically adjusts its linear velocity according to the road geometry.
+
+### Straight Segments
+
+```text
+linear_speed
+```
+
+### Curves
+
+```text
+curve_speed
+```
+
+The controller automatically reduces speed during curves to improve tracking accuracy.
+
+---
+
+## Velocity Ramp
+
+To avoid abrupt accelerations, the linear velocity is increased gradually using an acceleration ramp.
+
+This reduces wheel slip and improves stability during transitions between different motion states.
+
+---
+
+## Turn-Based Speed Reduction
+
+The controller also reduces forward speed when large steering commands are required.
+
+As angular velocity increases, the robot automatically slows down to maintain stability.
+
+This behavior improves performance in sharp turns and prevents overshooting.
+
+---
+
+## Finite State Machine Integration
+
+The controller combines line following, odometry, traffic lights, traffic signs, and intersection detection through a Finite State Machine (FSM).
+
+The FSM determines when the robot should:
+
+- Follow the lane.
+- Stop at an intersection.
+- Execute a turn.
+- Cross an intersection.
+- Perform special traffic sign behaviors.
+- Remain stopped.
+
+This architecture separates perception from decision making and allows complex navigation behaviors to be implemented in a modular way.
+
+---
+
 # Running the System
 
-## Jetson Setup
+## 1. On the Jetson
 
-Source the workspace:
 
 ```bash
 source install/setup.bash
-```
-
-Launch the Jetson nodes:
-
-```bash
 ros2 launch mcr2_puzzlebot puzzlebot_jetson.launch.py
 ```
 
@@ -310,17 +411,12 @@ This starts:
 
 ---
 
-## Laptop Setup
+## 2. On the Laptop
 
 Source the workspace:
 
 ```bash
 source install/setup.bash
-```
-
-Launch navigation:
-
-```bash
 ros2 launch mcr2_puzzlebot puzzlebot_lap.launch.py
 ```
 
@@ -332,7 +428,7 @@ This starts:
 
 ---
 
-## Running YOLO Traffic Sign Detection
+## 3. Start Traffic Sign Detection
 
 The traffic sign detector must be launched separately:
 
