@@ -1,4 +1,4 @@
-# Manchester Robotics Challenge 2 - Autonomous Navigation System
+# Manchester Robotics Challenge - Autonomous Navigation System
 
 ## Overview
 
@@ -284,88 +284,16 @@ CompressedImage
 ```
 
 This significantly reduces bandwidth consumption while preserving enough information for line following and traffic sign detection.
-
----
-
-# Parameters
-
-The main parameters are configured in `params.yaml`.
-
-## Line Follower
-
-```yaml
-crop_percent: 0.20
-```
-
----
-
-## Controller
-
-```yaml
-linear_speed: 0.15
-curve_speed: 0.07
-
-kp_straight: 0.0015
-kp_curve: 0.0040
-kd: 0.0030
-
-max_angular_vel: 1.5
-```
-
----
-
-## Traffic Light Detector
-
-```yaml
-min_blob_area: 2000
-min_circularity: 0.95
-```
-
----
-
-## Image Compressor
-
-```yaml
-width: 416
-height: 416
-
-jpeg_quality: 40
-
-grayscale: true
-```
-
 ---
 
 # Running the System
 
-## 1. Configure ROS Networking
-
-On both the Jetson and the laptop:
-
-```bash
-export ROS_DOMAIN_ID=0
-```
-
-Verify communication:
-
-```bash
-ros2 topic list
-```
-
----
-
-# Jetson Setup
-
-Source ROS 2:
-
-```bash
-source /opt/ros/humble/setup.bash
-```
+## Jetson Setup
 
 Source the workspace:
 
 ```bash
-source ~/ros2_challenge_mcr2/ros2_challenge2/install/setup.bash
+source install/setup.bash
 ```
 
 Launch the Jetson nodes:
@@ -381,18 +309,12 @@ This starts:
 
 ---
 
-# Laptop Setup
-
-Source ROS 2:
-
-```bash
-source /opt/ros/humble/setup.bash
-```
+## Laptop Setup
 
 Source the workspace:
 
 ```bash
-source ~/ros2_challenge_mcr2/ros2_challenge2/install/setup.bash
+source install/setup.bash
 ```
 
 Launch navigation:
@@ -409,7 +331,7 @@ This starts:
 
 ---
 
-# Running YOLO Traffic Sign Detection
+## Running YOLO Traffic Sign Detection
 
 The traffic sign detector must be launched separately:
 
@@ -419,31 +341,7 @@ ros2 run mcr2_puzzlebot traffic_sign_detector
 
 ---
 
-# Useful Debug Commands
-
-Check line follower frequency:
-
-```bash
-ros2 topic hz /line_error
-```
-
-Check traffic light detections:
-
-```bash
-ros2 topic echo /traffic_light/state
-```
-
-Check traffic sign detections:
-
-```bash
-ros2 topic echo /traffic_sign/state
-```
-
-Check odometry:
-
-```bash
-ros2 topic echo /odom
-```
+# Useful Commands
 
 Check active nodes:
 
@@ -457,7 +355,11 @@ Check active topics:
 ros2 topic list
 ```
 
----
+Resume Navigation After STOP
+
+```bash
+ros2 topic pub /fsm_command std_msgs/msg/String "{data: 'START'}"
+```
 
 # Project Structure
 
@@ -479,13 +381,13 @@ mcr2_puzzlebot/
 │   └── params.yaml
 │
 └── models/
-    └── YOLOv8 weights
+    └── best_1.pt
 ```
 
 ---
 
 # Authors
-
-Manchester Robotics Challenge 2
-
-Tecnológico de Monterrey
+José Eduardo Sánchez Martínez
+Cesar Arellano
+Josue Ureña
+Rafael Gamiz
