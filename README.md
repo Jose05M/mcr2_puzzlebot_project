@@ -284,6 +284,7 @@ CompressedImage
 ```
 
 This significantly reduces bandwidth consumption while preserving enough information for line following and traffic sign detection.
+
 ---
 
 # Running the System
