@@ -100,10 +100,7 @@ class YoloInference(Node):
             #frame = cv2.resize(self.img, (416,416))
             frame = self.img
 
-            # GRAYSCALE
             #gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-
-            # YOLO necesita 3 canales
             #gray_3ch = cv2.cvtColor(gray,cv2.COLOR_GRAY2BGR)
 
             # INFERENCIA
