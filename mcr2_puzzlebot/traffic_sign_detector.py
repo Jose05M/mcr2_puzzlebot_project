@@ -58,7 +58,7 @@ class YoloInference(Node):
         self.declare_parameter('model_path','/home/ed/Downloads/yolo_train/best_1.pt')
         self.declare_parameter('min_area',8000)
         self.declare_parameter('max_area',80000)
-        self.declare_parameter('debug_view',False)
+        self.declare_parameter('debug_view',True)
 
         self.detect_counter = 0
         self.required_detections = 3

@@ -65,5 +65,4 @@ def generate_launch_description():
         config_arg,
         controlador,
         odometria,
-        seguidor_linea,
     ])
